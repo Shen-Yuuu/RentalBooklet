@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "租房留证册主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "租房留证册：按引导完成房屋检查并生成状况报告"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "租房留证册"
+    },
+    {
+      "name": "perm_mic_reason",
+      "value": "用于将您的语音描述转为检查备注，识别在本机完成"
+    },
+    {
+      "name": "perm_location_reason",
+      "value": "在您开启位置记录时，为检查照片附加拍摄位置，默认关闭"
+    }
+  ]
+}

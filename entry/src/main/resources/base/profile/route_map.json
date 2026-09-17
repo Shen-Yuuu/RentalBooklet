@@ -1,0 +1,54 @@
+{
+  "routerMap": [
+    {
+      "name": "sceneSelect",
+      "pageSourceFile": "src/main/ets/pages/SceneSelectPage.ets",
+      "buildFunction": "sceneSelectBuilder"
+    },
+    {
+      "name": "houseEdit",
+      "pageSourceFile": "src/main/ets/pages/HouseEditPage.ets",
+      "buildFunction": "houseEditBuilder"
+    },
+    {
+      "name": "houseDetail",
+      "pageSourceFile": "src/main/ets/pages/HouseDetailPage.ets",
+      "buildFunction": "houseDetailBuilder"
+    },
+    {
+      "name": "inspection",
+      "pageSourceFile": "src/main/ets/pages/InspectionPage.ets",
+      "buildFunction": "inspectionBuilder"
+    },
+    {
+      "name": "meterOcr",
+      "pageSourceFile": "src/main/ets/pages/MeterOcrPage.ets",
+      "buildFunction": "meterOcrBuilder"
+    },
+    {
+      "name": "review",
+      "pageSourceFile": "src/main/ets/pages/ReviewPage.ets",
+      "buildFunction": "reviewBuilder"
+    },
+    {
+      "name": "confirmSign",
+      "pageSourceFile": "src/main/ets/pages/ConfirmSignPage.ets",
+      "buildFunction": "confirmSignBuilder"
+    },
+    {
+      "name": "reportPreview",
+      "pageSourceFile": "src/main/ets/pages/ReportPreviewPage.ets",
+      "buildFunction": "reportPreviewBuilder"
+    },
+    {
+      "name": "archiveDetail",
+      "pageSourceFile": "src/main/ets/pages/ArchiveDetailPage.ets",
+      "buildFunction": "archiveDetailBuilder"
+    },
+    {
+      "name": "compare",
+      "pageSourceFile": "src/main/ets/pages/ComparePage.ets",
+      "buildFunction": "compareBuilder"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "forms": [
+    {
+      "name": "InspectionProgressCard",
+      "src": "./ets/widget/InspectionProgressCard.ets",
+      "uiSyntax": "arkts",
+      "isDefault": true,
+      "updateEnabled": false,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2"
+      ]
+    }
+  ]
+}
