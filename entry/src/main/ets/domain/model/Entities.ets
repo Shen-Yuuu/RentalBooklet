@@ -106,6 +106,8 @@ export class RecordSummary {
   frozenAt: number = 0;
   totalItems: number = 0;
   doneItems: number = 0;
+  /** 全文检索文本：该记录全部检查项名称与备注拼接（产品文档 §5.4 可搜索承诺）。 */
+  itemText: string = '';
 }
 
 /** 前后对比已确认汇总（compare_result 计算，E2 汇总条/E3 挂接用）。 */

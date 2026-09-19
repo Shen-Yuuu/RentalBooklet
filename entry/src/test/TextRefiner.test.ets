@@ -29,6 +29,14 @@ export default function textRefinerTest(): void {
       expect(r.refined).assertEqual('据对方表述，墙是新刷的');
     });
 
+    it('attribution_request_keeps_imperative', 0, () => {
+      // 归因剥离不得吞掉祈使语义：要求/让 → "对方要求"
+      const r = TextRefiner.refine('房东要求维修空调');
+      expect(r.refined).assertEqual('对方要求维修空调');
+      const r2 = TextRefiner.refine('物业让换锁');
+      expect(r2.refined).assertEqual('对方要求换锁');
+    });
+
     it('self_blame_removed', 0, () => {
       const r = TextRefiner.refine('冰箱门凹陷，是我弄坏的');
       expect(r.refined).assertEqual('冰箱门凹陷，成因未确认');
@@ -50,10 +58,16 @@ export default function textRefinerTest(): void {
     it('ambiguous_quantity_does_not_block_later_conversion', 0, () => {
       // 位置切片替换回归：跳过的歧义量词（两三米）不得被后续同串替换误伤
       const r = TextRefiner.refine('墙裙两三米，踢脚线三米');
-      expect(r.refined).assertEqual('墙裙两三米，踢脚线3米');
+      expect(r.refined).assertEqual('墙裙两三米，踢脚线约3米');
       expect(r.changes.length).assertEqual(1);
       expect(r.changes[0].before).assertEqual('三米');
-      expect(r.changes[0].after).assertEqual('3米');
+      expect(r.changes[0].after).assertEqual('约3米');
+    });
+
+    it('bare_cn_quantity_gets_approx_marker', 0, () => {
+      // 裸口语数量（无"左右"）同为回忆近似值，统一加"约"（§5.7 口径）
+      const r = TextRefiner.refine('窗缝十厘米');
+      expect(r.refined).assertEqual('窗缝约10厘米');
     });
 
     it('multiple_matches_all_recorded', 0, () => {

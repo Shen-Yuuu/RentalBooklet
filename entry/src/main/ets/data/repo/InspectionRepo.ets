@@ -175,7 +175,7 @@ export class InspectionRepo {
     }
   }
 
-  /** 记录 Tab 跨房屋列表：JOIN house 取房屋简称，按开始时间倒序。 */
+  /** 记录 Tab 跨房屋列表：JOIN house 取房屋简称，按开始时间倒序；item_text 供全文搜索（产品文档 §5.4）。 */
   async listSummaries(): Promise<RecordSummary[]> {
     const db = await DbManager.getStore(this.ctx);
     try {
@@ -184,7 +184,9 @@ export class InspectionRepo {
            h.name AS house_name,
            (SELECT COUNT(*) FROM check_item ci JOIN room r ON ci.room_id = r.id WHERE r.inspection_id = i.id) AS total_items,
            (SELECT COUNT(*) FROM check_item ci JOIN room r ON ci.room_id = r.id
-              WHERE r.inspection_id = i.id AND ci.status != '${ItemStatus.PENDING}') AS done_items
+              WHERE r.inspection_id = i.id AND ci.status != '${ItemStatus.PENDING}') AS done_items,
+           (SELECT group_concat(COALESCE(ci.name, '') || ' ' || COALESCE(ci.note_final, '') || ' ' || COALESCE(ci.note_raw, ''), ' ')
+              FROM check_item ci JOIN room r ON ci.room_id = r.id WHERE r.inspection_id = i.id) AS item_text
          FROM inspection i JOIN house h ON i.house_id = h.id
          ORDER BY i.started_at DESC`);
       const list: RecordSummary[] = [];
@@ -201,6 +203,7 @@ export class InspectionRepo {
         s.frozenAt = DbManager.rsLong(rs, 'frozen_at');
         s.totalItems = DbManager.rsLong(rs, 'total_items');
         s.doneItems = DbManager.rsLong(rs, 'done_items');
+        s.itemText = DbManager.rsString(rs, 'item_text');
         list.push(s);
       }
       rs.close();
@@ -586,17 +589,24 @@ export class InspectionRepo {
     }
 
     // ⑤ 单事务置 FROZEN（最终提交点：此前所有步骤均可安全重跑）
+    // 完整度门禁在 ReviewPage/ConfirmSignPage 页面层执行（强制继续需二次确认），
+    // 本方法内 requiredRate/suggestedRate 仅作冻结快照写入。
     db.beginTransaction();
     try {
       const bucket: relationalStore.ValuesBucket = {
         'status': InspectionStatus.FROZEN,
         'frozen_at': now,
         'report_no': reportNo,
-        'participants': participants.length > 0 ? participants : null,
-        'extra_note': extraNote.length > 0 ? extraNote : null,
         'complete_required': requiredRate,
         'complete_suggested': suggestedRate
       };
+      // 空值不写键：修订版本重冻结时保留上次已存档的参与人/补充说明，避免空参覆盖置 NULL
+      if (participants.length > 0) {
+        bucket['participants'] = participants;
+      }
+      if (extraNote.length > 0) {
+        bucket['extra_note'] = extraNote;
+      }
       const pre = new relationalStore.RdbPredicates(T_INSPECTION);
       pre.equalTo('id', inspectionId);
       // 谓词同时限定 DRAFT：并发/重入场景下非草稿记录 0 行命中，事务回滚不产生副作用
@@ -604,6 +614,17 @@ export class InspectionRepo {
       const rows = await db.update(bucket, pre);
       if (rows === 0) {
         throw new DbError('冻结失败：记录已不在草稿状态（仅 DRAFT 可冻结）');
+      }
+      // 报告号防并发冲突：序号计数与最终提交之间存在哈希耗时窗口，此处兜底复查
+      const dupRs = await db.querySql(
+        'SELECT COUNT(*) AS cnt FROM inspection WHERE report_no = ? AND id != ?', [reportNo, inspectionId]);
+      let dupCount: number = 0;
+      if (dupRs.goToNextRow()) {
+        dupCount = DbManager.rsLong(dupRs, 'cnt');
+      }
+      dupRs.close();
+      if (dupCount > 0) {
+        throw new DbError(`冻结失败：报告号 ${reportNo} 已被占用，请重试`);
       }
       db.commit();
     } catch (err) {
@@ -622,8 +643,9 @@ export class InspectionRepo {
   /**
    * F3 草稿清理：删除一条进行中草稿及其全部关联数据。
    * 守卫：仅 DRAFT 可删（冻结记录不可删除，数据完整性红线）。
-   * 顺序：先递归清沙箱照片目录（失败不阻塞），再单事务内按外键安全序删行，
-   * 最后发 home_dirty 刷新信号。
+   * 顺序：先单事务内按外键安全序删行（失败回滚零副作用），提交成功后再递归清
+   * 沙箱照片目录（失败不阻塞，残留目录可下次清理）——顺序倒置会导致
+   * "事务回滚但文件已删"的证据丢失窗口；最后发 home_dirty 刷新信号。
    */
   async deleteDraft(inspectionId: number): Promise<void> {
     const ins = await this.getById(inspectionId);
@@ -633,7 +655,6 @@ export class InspectionRepo {
     if (ins.status !== InspectionStatus.DRAFT) {
       throw new DbError('删除失败：仅进行中草稿可删除');
     }
-    InspectionRepo.removeDirRecursive(ManifestRepo.inspectionDir(this.ctx, inspectionId));
 
     const db = await DbManager.getStore(this.ctx);
     db.beginTransaction();
@@ -654,6 +675,8 @@ export class InspectionRepo {
       const e = err as BusinessError;
       throw new DbError(`草稿删除失败 code=${e.code} message=${e.message}`);
     }
+    // 行删除提交成功后清理沙箱照片目录（失败静默，残留目录不影响任何数据一致性）
+    InspectionRepo.removeDirRecursive(ManifestRepo.inspectionDir(this.ctx, inspectionId));
     AppStorage.setOrCreate('home_dirty', Date.now());
   }
 

@@ -22,13 +22,13 @@ struct InspectionProgressCard {
         Text(this.houseName)
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#333333')
+          .fontColor($r('app.color.text_pri'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.sceneTitle.length > 0) {
           Text(this.sceneTitle)
             .fontSize(11)
-            .fontColor('#888888')
+            .fontColor($r('app.color.text_ter'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -38,13 +38,13 @@ struct InspectionProgressCard {
 
       Text(this.progressText)
         .fontSize(12)
-        .fontColor('#555555')
+        .fontColor($r('app.color.text_sec'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Text(this.statusText)
         .fontSize(11)
-        .fontColor('#4A90D9')
+        .fontColor($r('app.color.brand'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }

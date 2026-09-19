@@ -491,20 +491,45 @@ export class ReportComposer {
    */
   private static approxMeasure(text: string, fontSize: number): number {
     let w = 0;
-    for (let i = 0; i < text.length; i++) {
+    let i = 0;
+    while (i < text.length) {
       const code = text.charCodeAt(i);
+      // 增补平面字符（代理对）按一个全角宽度计，避免被拆成两个半角而低估宽度
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length
+        && text.charCodeAt(i + 1) >= 0xDC00 && text.charCodeAt(i + 1) <= 0xDFFF) {
+        w += fontSize;
+        i += 2;
+        continue;
+      }
       const full = (code >= 0x2E80 && code <= 0x9FFF) || (code >= 0xF900 && code <= 0xFAFF)
         || (code >= 0xFF00 && code <= 0xFFEF);
       w += full ? fontSize : fontSize * 0.55;
+      i += 1;
     }
     return w;
   }
 
+  /** 按 Unicode 码点截断（代理对不劈开），超长以省略号收尾。 */
   private static truncate(text: string, maxChars: number): string {
     if (text.length <= maxChars) {
       return text;
     }
-    return `${text.substring(0, maxChars - 1)}…`;
+    const keep = maxChars - 1;
+    let count = 0;
+    let end = 0;
+    let i = 0;
+    while (i < text.length && count < keep) {
+      const code = text.charCodeAt(i);
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length
+        && text.charCodeAt(i + 1) >= 0xDC00 && text.charCodeAt(i + 1) <= 0xDFFF) {
+        i += 2;
+      } else {
+        i += 1;
+      }
+      count++;
+      end = i;
+    }
+    return `${text.substring(0, end)}…`;
   }
 
   private static statusText(status: string): string {

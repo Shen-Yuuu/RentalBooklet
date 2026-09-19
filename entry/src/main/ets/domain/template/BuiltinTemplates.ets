@@ -106,13 +106,110 @@ export const MOVE_IN_TEMPLATE: SceneTemplate = {
   handover: true
 };
 
-/** 退租与入住同构（key 一致），前后对比按 key 对齐。 */
+/**
+ * 退租与入住同构（key 一致），前后对比按 key 对齐。
+ * 注意：rooms/meters 必须是独立字面量而非引用 MOVE_IN_TEMPLATE——
+ * TemplateEngine.test.ets 的复合键集合一致性断言依赖两个独立定义才能捕获
+ * "只改了其中一个模板"的回归（共用引用时断言恒真，安全网失效）。
+ */
 export const MOVE_OUT_TEMPLATE: SceneTemplate = {
   sceneKey: 'move_out',
   title: '退租交房',
   description: '复用入住结构逐项核对，生成退租交接报告',
-  rooms: MOVE_IN_TEMPLATE.rooms,
-  meters: MOVE_IN_TEMPLATE.meters,
+  rooms: [
+    {
+      key: 'entrance', name: '入户门', items: [
+        { key: 'door_appearance', name: '门体外观（划痕/凹陷）' },
+        { key: 'door_lock', name: '门锁与把手开合' },
+        { key: 'peephole', name: '猫眼', required: false },
+        { key: 'doorbell', name: '门铃', required: false },
+        { key: 'door_seal', name: '密封条', required: false },
+        { key: 'entrance_floor', name: '门口地面', required: false }
+      ]
+    },
+    {
+      key: 'living', name: '客厅', items: [
+        { key: 'wall', name: '墙面（污渍/裂缝/水渍）' },
+        { key: 'ceiling', name: '天花板与吊顶', required: false },
+        { key: 'floor', name: '地板/瓷砖（划痕/空鼓）' },
+        { key: 'window', name: '窗户与纱窗' },
+        { key: 'curtain', name: '窗帘及轨道', required: false },
+        { key: 'light', name: '灯具与开关', required: false },
+        { key: 'socket', name: '插座通电', required: false },
+        { key: 'ac', name: '空调外观与运行', required: false }
+      ]
+    },
+    {
+      key: 'balcony', name: '阳台', items: [
+        { key: 'floor_drain', name: '地面与排水口', required: false },
+        { key: 'railing', name: '栏杆稳固', required: false },
+        { key: 'dryer_rack', name: '晾衣设施', required: false },
+        { key: 'washer_spot', name: '洗衣机位（若在此）', required: false }
+      ]
+    },
+    {
+      key: 'kitchen', name: '厨房', items: [
+        { key: 'cabinet', name: '橱柜门板与铰链' },
+        { key: 'countertop', name: '台面（划痕/烫痕）' },
+        { key: 'faucet_drain', name: '水龙头与下水' },
+        { key: 'gas_stove', name: '燃气灶' },
+        { key: 'range_hood', name: '油烟机', required: false },
+        { key: 'gas_valve', name: '燃气阀门', required: false },
+        { key: 'wall_tile', name: '墙面瓷砖', required: false },
+        { key: 'floor_drain', name: '地漏', required: false }
+      ]
+    },
+    {
+      key: 'bathroom', name: '卫生间', items: [
+        { key: 'toilet', name: '马桶（冲水/底座密封）' },
+        { key: 'sink', name: '洗手台与下水' },
+        { key: 'shower', name: '淋浴区（花洒/挡水条）', required: false },
+        { key: 'mirror_cabinet', name: '镜柜', required: false },
+        { key: 'exhaust_fan', name: '排风扇', required: false },
+        { key: 'floor_drain', name: '地漏排水' },
+        { key: 'leak_traces', name: '渗漏痕迹', required: false },
+        { key: 'wall_tile', name: '瓷砖空鼓', required: false }
+      ]
+    },
+    {
+      key: 'master_bedroom', name: '主卧', items: [
+        { key: 'wall', name: '墙面' },
+        { key: 'floor', name: '地板', required: false },
+        { key: 'window_lock', name: '窗户与锁扣' },
+        { key: 'wardrobe', name: '衣柜（门/隔板/抽屉）', required: false },
+        { key: 'ac', name: '空调', required: false },
+        { key: 'curtain', name: '窗帘', required: false },
+        { key: 'socket', name: '插座', required: false }
+      ]
+    },
+    {
+      key: 'second_bedroom', name: '次卧', items: [
+        { key: 'wall', name: '墙面' },
+        { key: 'floor', name: '地板', required: false },
+        { key: 'window_lock', name: '窗户与锁扣' },
+        { key: 'wardrobe', name: '衣柜（门/隔板/抽屉）', required: false },
+        { key: 'ac', name: '空调', required: false },
+        { key: 'curtain', name: '窗帘', required: false },
+        { key: 'socket', name: '插座', required: false }
+      ]
+    },
+    {
+      key: 'meters', name: '水电燃气表', items: [
+        { key: 'electricity_meter', name: '电表读数', guide: GuideType.DIAL },
+        { key: 'water_meter', name: '水表读数', guide: GuideType.DIAL },
+        { key: 'gas_meter', name: '燃气表读数', guide: GuideType.DIAL },
+        { key: 'meter_id', name: '表具编号与安装位置', required: false }
+      ]
+    },
+    {
+      key: 'handover', name: '钥匙与门禁', items: [
+        { key: 'key_count', name: '钥匙数量' },
+        { key: 'access_card_count', name: '门禁卡数量' },
+        { key: 'parking_or_storage', name: '车位/储物凭证', required: false }
+      ]
+    }
+  ],
+  meters: [MeterType.ELECTRICITY, MeterType.WATER, MeterType.GAS],
   handover: true
 };
 

@@ -31,6 +31,8 @@ struct HouseEditPage {
   @State tenantName: string = '';
   @State tenantPhone: string = '';
   @State recordLocation: boolean = false;
+  /** 完整地址默认折叠（隐私外显红线：首页只显简称，完整地址点击展开才显示）。 */
+  @State showAddress: boolean = false;
   @State busy: boolean = false;
   @State errorText: string = '';
   /** 档案编辑模式（houseId>0）：仅编辑保存档案，不发起检查。 */
@@ -169,12 +171,23 @@ struct HouseEditPage {
       }
       .width('100%')
 
-      Text('完整地址（选填，默认隐藏）').fontSize(13).opacity(0.7).width('100%')
-      TextInput({ text: this.fullAddress, placeholder: '仅导出报告时按需使用' })
-        .width('100%')
-        .onChange((v: string) => {
-          this.fullAddress = v;
-        })
+      Row({ space: 6 }) {
+        Text('完整地址（选填，默认隐藏）').fontSize(13).opacity(0.7).layoutWeight(1)
+        Text(this.showAddress ? '收起' : '展开')
+          .fontSize(12)
+          .fontColor($r('app.color.brand'))
+      }
+      .width('100%')
+      .onClick(() => {
+        this.showAddress = !this.showAddress;
+      })
+      if (this.showAddress) {
+        TextInput({ text: this.fullAddress, placeholder: '仅导出报告时按需使用' })
+          .width('100%')
+          .onChange((v: string) => {
+            this.fullAddress = v;
+          })
+      }
 
       Row({ space: 10 }) {
         Column({ space: 4 }) {
@@ -192,6 +205,9 @@ struct HouseEditPage {
             .onChange((v: string) => {
               this.landlordPhone = v;
             })
+          if (!HouseEditPage.isValidPhone(this.landlordPhone)) {
+            Text('手机号应为 11 位数字').fontSize(11).fontColor($r('app.color.warning'))
+          }
         }
         .layoutWeight(1)
       }
@@ -213,6 +229,9 @@ struct HouseEditPage {
             .onChange((v: string) => {
               this.tenantPhone = v;
             })
+          if (!HouseEditPage.isValidPhone(this.tenantPhone)) {
+            Text('手机号应为 11 位数字').fontSize(11).fontColor($r('app.color.warning'))
+          }
         }
         .layoutWeight(1)
       }
@@ -278,6 +297,11 @@ struct HouseEditPage {
     return this.showForm && this.houseName.trim().length > 0;
   }
 
+  /** 手机号软校验：仅行内提示不阻塞（设计 L2：11 位行内提示）。 */
+  private static isValidPhone(p: string): boolean {
+    return p.trim().length === 0 || /^\d{11}$/.test(p.trim());
+  }
+
   private loadHouses(): void {
     const uiCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     new HouseRepo(uiCtx).listAll().then((list: House[]) => {
@@ -296,6 +320,8 @@ struct HouseEditPage {
       this.editingHouse = h;
       this.houseName = h.name;
       this.fullAddress = h.fullAddress;
+      // 编辑已有地址时展开输入框，避免"有地址却看似为空"的误解
+      this.showAddress = h.fullAddress.length > 0;
       this.landlordName = h.landlordName;
       this.landlordPhone = h.landlordPhone;
       this.tenantName = h.tenantName;
@@ -333,6 +359,8 @@ struct HouseEditPage {
       house.tenantPhone = this.tenantPhone.trim();
       house.recordLocation = this.recordLocation;
       await new HouseRepo(uiCtx).update(house);
+      // 三个 Tab 常驻仅靠 home_dirty 刷新：编辑保存后必须发信号，否则首页/记录页显示旧房屋名
+      AppStorage.setOrCreate('home_dirty', Date.now());
       this.getUIContext().getPromptAction().showToast({ message: '档案已保存' });
       this.pathStack.pop();
     } catch (err) {
@@ -365,6 +393,7 @@ struct HouseEditPage {
         house.recordLocation = this.recordLocation;
         houseId = await new HouseRepo(uiCtx).create(house);
         houseName = house.name;
+        AppStorage.setOrCreate('home_dirty', Date.now());
         // F4：首次建档一次性提示（偏好读写失败静默，不阻塞检查流程）
         await this.maybeShowCreateHint(uiCtx);
       } else {
@@ -394,23 +423,23 @@ struct HouseEditPage {
     }
   }
 
-  /** F4：首次新建房屋档案后弹一次性引导（已展示过则跳过）。 */
+  /** F4：首次新建房屋档案后弹一次性引导（展示即记标记，保证"只提示一次"）。 */
   private async maybeShowCreateHint(uiCtx: common.UIAbilityContext): Promise<void> {
     try {
       const shown = await AppPreferences.getBool(uiCtx, KEY_HOUSE_CREATE_HINT_SHOWN, false);
       if (shown) {
         return;
       }
+      AppPreferences.setBool(uiCtx, KEY_HOUSE_CREATE_HINT_SHOWN, true).catch(() => {
+      });
       this.getUIContext().showAlertDialog({
         title: '房屋档案已创建',
-        message: '档案信息可随时补充修改；建议完成一次入住检查并冻结，形成基线报告，方便日后对比与留证。',
-        autoCancel: true,
+        message: '数据仅存本机，卸载或换机即丢失，请定期在设置中导出归档；建议完成一次入住检查并冻结，形成基线报告，方便日后对比与留证。',
+        autoCancel: false,
         alignment: DialogAlignment.Center,
         confirm: {
           value: '我知道了',
           action: () => {
-            AppPreferences.setBool(uiCtx, KEY_HOUSE_CREATE_HINT_SHOWN, true).catch(() => {
-            });
           }
         }
       });

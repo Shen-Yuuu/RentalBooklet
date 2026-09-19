@@ -4,7 +4,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { InspectionStatus } from '../../domain/model/CoreEnums';
 
 export const DB_NAME: string = 'rental.db';
-export const DB_VERSION: number = 2;
+export const DB_VERSION: number = 3;
 
 export class DbError extends Error {
   constructor(message: string) {
@@ -150,6 +150,11 @@ export class DbManager {
     `ALTER TABLE inspection ADD COLUMN pdf_sha256 TEXT`
   ];
 
+  /** v3 迁移：报告号唯一索引（冻结事务内已有占用复查，此处为库级硬约束兜底；NULL 报告号不受约束）。 */
+  static readonly DDL_V3: string[] = [
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_inspection_report_no ON inspection(report_no)`
+  ];
+
   /** 接受基类 Context：FormExtensionAbility（卡片进程）同样需要打开 RDB。 */
   static async getStore(context: common.Context): Promise<relationalStore.RdbStore> {
     if (DbManager.storePromise !== null) {
@@ -195,6 +200,19 @@ export class DbManager {
     return db;
   }
 
+  /** 迁移单语句执行：跨进程（UI 与卡片进程）首启并发迁移时 ALTER 可能报 duplicate column，视为已成功。 */
+  private static async execMigrationSql(db: relationalStore.RdbStore, sql: string): Promise<void> {
+    try {
+      await db.executeSql(sql);
+    } catch (err) {
+      const e = err as BusinessError;
+      if (e.message !== undefined && e.message.includes('duplicate column name')) {
+        return;
+      }
+      throw new Error(`迁移语句执行失败 code=${e.code} message=${e.message}`);
+    }
+  }
+
   static async migrate(db: relationalStore.RdbStore): Promise<void> {
     const current: number = db.version;
     if (current >= DB_VERSION) {
@@ -218,7 +236,7 @@ export class DbManager {
       db.beginTransaction();
       try {
         for (const sql of DbManager.DDL_V2) {
-          await db.executeSql(sql);
+          await DbManager.execMigrationSql(db, sql);
         }
         db.commit();
       } catch (err) {
@@ -227,7 +245,20 @@ export class DbManager {
         throw new DbError(`v2 迁移失败 code=${e.code} message=${e.message}`);
       }
     }
-    // 后续版本迁移在此追加：if (current < 3) { ... }
+    if (current < 3) {
+      db.beginTransaction();
+      try {
+        for (const sql of DbManager.DDL_V3) {
+          await DbManager.execMigrationSql(db, sql);
+        }
+        db.commit();
+      } catch (err) {
+        db.rollBack();
+        const e = err as BusinessError;
+        throw new DbError(`v3 迁移失败 code=${e.code} message=${e.message}`);
+      }
+    }
+    // 后续版本迁移在此追加：if (current < 4) { ... }
     db.version = DB_VERSION;
   }
 

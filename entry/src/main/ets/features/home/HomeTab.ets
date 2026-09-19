@@ -33,6 +33,25 @@ export struct HomeTab {
     return c === undefined ? 0 : c;
   }
 
+  /** 租约到期温和提醒（产品文档 §5.1）：30 天内到期或已过期时返回提示文案，否则空串。 */
+  private static leaseHintOf(h: House): string {
+    if (h.leaseEndDate <= 0) {
+      return '';
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.ceil((h.leaseEndDate - Date.now()) / dayMs);
+    if (days < 0) {
+      return `租约已到期 ${-days} 天，可安排退租检查`;
+    }
+    if (days === 0) {
+      return '租约今日到期，可安排退租检查';
+    }
+    if (days <= 30) {
+      return `租约 ${days} 天后到期，可安排退租检查`;
+    }
+    return '';
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column({ space: 12 }) {
@@ -81,6 +100,13 @@ export struct HomeTab {
                           .fontColor($r('app.color.text_sec'))
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        if (HomeTab.leaseHintOf(h).length > 0) {
+                          Text(HomeTab.leaseHintOf(h))
+                            .fontSize(Theme.fontCaption)
+                            .fontColor($r('app.color.warning'))
+                            .maxLines(1)
+                            .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        }
                       }
                       .alignItems(HorizontalAlign.Start)
                       .layoutWeight(1)

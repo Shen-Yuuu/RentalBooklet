@@ -101,6 +101,59 @@ export struct SettingsTab {
     });
   }
 
+  /** F3 一键清理全部未冻结草稿：危险操作二次确认，逐条走 deleteDraft 事务守卫路径。 */
+  private confirmCleanAllDrafts(): void {
+    if (this.drafts.length === 0 || this.deletingDraftId !== 0) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '一键清理草稿',
+      message: `确定删除全部 ${this.drafts.length} 条检查草稿吗？相关照片与记录将被清除，且无法恢复。`,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      primaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: '全部删除',
+        fontColor: $r('app.color.danger'),
+        action: () => {
+          this.cleanAllDrafts();
+        }
+      }
+    });
+  }
+
+  private cleanAllDrafts(): void {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const repo = new InspectionRepo(ctx);
+    const targets: RecordSummary[] = this.drafts;
+    let done = 0;
+    const next: () => void = (): void => {
+      if (done >= targets.length) {
+        this.deletingDraftId = 0;
+        this.toast(`已清理 ${done} 条草稿`);
+        this.reloadDrafts();
+        this.refreshStorage();
+        WidgetService.refreshProgress(ctx);
+        return;
+      }
+      const s = targets[done];
+      this.deletingDraftId = s.inspectionId;
+      repo.deleteDraft(s.inspectionId).then(() => {
+        done++;
+        next();
+      }).catch(() => {
+        // 单条失败跳过继续，不阻塞整体清理
+        done++;
+        next();
+      });
+    };
+    next();
+  }
+
   /** 数据逃生口：数据库 + 照片一次性导出到用户选择目录（免权限）。 */
   private exportAllData(): void {
     if (this.exporting) {
@@ -279,12 +332,21 @@ export struct SettingsTab {
 
         if (this.drafts.length > 0) {
           ListItem() {
-            Text(`草稿清理（${this.drafts.length}）`)
-              .fontSize(Theme.fontBody)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_sec'))
-              .width('100%')
-              .margin({ top: 4 })
+            Row({ space: 8 }) {
+              Text(`草稿清理（${this.drafts.length}）`)
+                .fontSize(Theme.fontBody)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.text_sec'))
+                .layoutWeight(1)
+              Text('一键清理')
+                .fontSize(13)
+                .fontColor($r('app.color.danger'))
+                .onClick(() => {
+                  this.confirmCleanAllDrafts();
+                })
+            }
+            .width('100%')
+            .margin({ top: 4 })
           }
 
           ForEach(this.drafts, (s: RecordSummary) => {

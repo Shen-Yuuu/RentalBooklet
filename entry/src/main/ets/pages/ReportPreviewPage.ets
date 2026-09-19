@@ -236,6 +236,18 @@ struct ReportPreviewPage {
     }
   }
 
+  /** 系统字体路径（HarmonyOS Sans）：Font 须经 UIContext 获取，失败传空串走渲染器默认字体。 */
+  private resolveFontPath(): string {
+    try {
+      const info = this.getUIContext().getFont().getFontByName('HarmonyOS Sans');
+      if (info !== undefined && info !== null && info.path.length > 0) {
+        return info.path;
+      }
+    } catch (ignored) {
+    }
+    return '';
+  }
+
   /** 参与人 JSON 解析（容错）：结构化参与人列表（确认信息页数据源）。 */
   private parseParticipantList(json: string): ReportParticipant[] {
     const list: ReportParticipant[] = [];
@@ -543,7 +555,7 @@ struct ReportPreviewPage {
     this.genError = '';
     const uiCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     try {
-      await PdfKitRenderer.render(this.docModel, this.pdfPath);
+      await PdfKitRenderer.render(this.docModel, this.pdfPath, this.resolveFontPath());
       const sha = (await hash.hash(this.pdfPath, 'sha256')).toLowerCase();
       await new InspectionRepo(uiCtx).updatePdfSha256(this.inspectionId, sha);
       AppStorage.setOrCreate('home_dirty', Date.now());
@@ -570,7 +582,7 @@ struct ReportPreviewPage {
         this.buildSummaryText(), this.photoPaths, manifestPath);
       if (outcome.photoShared < outcome.photoTotal) {
         this.getUIContext().getPromptAction()
-          .showToast({ message: '照片超过 30 张，本次仅分享报告与摘要' });
+          .showToast({ message: `照片较多，本次分享报告与前 ${outcome.photoShared} 张原图，其余可在导出中逐文件保存` });
       }
     } catch (err) {
       const e = err as Error;

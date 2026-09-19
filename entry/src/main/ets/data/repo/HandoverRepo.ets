@@ -58,6 +58,8 @@ export class HandoverRepo {
       'note': note.length > 0 ? note : null,
       'confirmed': confirmed ? 1 : 0
     };
+    // 事务包裹"先查后写"：并发重入不会重复插入（inspection_id 为主键）
+    db.beginTransaction();
     try {
       const existing = await this.get(inspectionId);
       if (existing === null) {
@@ -67,7 +69,9 @@ export class HandoverRepo {
         pre.equalTo('inspection_id', inspectionId);
         await db.update(bucket, pre);
       }
+      db.commit();
     } catch (err) {
+      db.rollBack();
       const e = err as BusinessError;
       throw new Error(`交接记录写入失败 code=${e.code}`);
     }

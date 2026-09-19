@@ -41,7 +41,7 @@ export struct IndexTabsModern {
     const style: FloatingTabBarStyle = {
       barSideMargin: 16,
       barBottomMargin: 10,
-      maskColor: '#0F000000',
+      maskColor: $r('app.color.overlay_soft'),
       systemMaterial: uiMaterial.isImmersiveMaterialSupported() ? new uiMaterial.ImmersiveMaterial() : undefined
     };
     return style;

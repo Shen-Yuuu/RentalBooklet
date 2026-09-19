@@ -23,9 +23,14 @@ export class TemplateEngine {
     throw new TemplateError(`未知的内置场景模板: ${sceneKey}`);
   }
 
-  /** 解析模板 JSON（用于未来用户自定义模板导入）。 */
+  /** 解析模板 JSON（用于未来用户自定义模板导入）：非法 JSON 统一抛 TemplateError。 */
   static parseSceneTemplate(json: string): SceneTemplate {
-    const parsed: object | null = JSON.parse(json);
+    let parsed: object | null = null;
+    try {
+      parsed = JSON.parse(json);
+    } catch (err) {
+      throw new TemplateError('模板 JSON 格式非法');
+    }
     if (parsed === null) {
       throw new TemplateError('模板 JSON 为空');
     }
@@ -75,12 +80,17 @@ export class TemplateEngine {
     }
     const validMeters: string[] = [MeterType.WATER, MeterType.ELECTRICITY, MeterType.GAS];
     const meters: MeterType[] = [];
+    const seenMeters = new Set<string>();
     if (Array.isArray(raw.meters)) {
       for (const m of raw.meters) {
         if (typeof m !== 'string' || !validMeters.includes(m)) {
           throw new TemplateError(`非法的表具类型: ${String(m)}`);
         }
-        meters.push(m);
+        // 去重：重复登记同一表型会让完整度 R2 分母重复计数
+        if (!seenMeters.has(m)) {
+          seenMeters.add(m);
+          meters.push(m);
+        }
       }
     }
     const tpl: SceneTemplate = {

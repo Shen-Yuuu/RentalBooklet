@@ -155,20 +155,23 @@ export class WidgetService {
               WHERE r.inspection_id = i.id AND ci.status != ?) AS done_items
          FROM inspection i JOIN house h ON i.house_id = h.id WHERE i.id = ?`,
         [ItemStatus.PENDING, inspectionId]);
-      if (rs.goToNextRow()) {
-        card.houseName = DbManager.rsString(rs, 'house_name');
-        card.sceneTitle = WidgetService.sceneTitleOf(DbManager.rsString(rs, 'scene_key'));
-        const total = DbManager.rsLong(rs, 'total_items');
-        const done = DbManager.rsLong(rs, 'done_items');
-        card.progressText = total > 0 ? `完成 ${done}/${total} 项` : '暂无检查项';
-        card.statusText = DbManager.rsString(rs, 'status') === InspectionStatus.FROZEN
-          ? '已冻结' : '检查进行中';
-        card.inspectionId = inspectionId;
-      } else {
-        card.progressText = '检查记录不存在';
-        card.statusText = '点击进入应用查看';
+      try {
+        if (rs.goToNextRow()) {
+          card.houseName = DbManager.rsString(rs, 'house_name');
+          card.sceneTitle = WidgetService.sceneTitleOf(DbManager.rsString(rs, 'scene_key'));
+          const total = DbManager.rsLong(rs, 'total_items');
+          const done = DbManager.rsLong(rs, 'done_items');
+          card.progressText = total > 0 ? `完成 ${done}/${total} 项` : '暂无检查项';
+          card.statusText = DbManager.rsString(rs, 'status') === InspectionStatus.FROZEN
+            ? '已冻结' : '检查进行中';
+          card.inspectionId = inspectionId;
+        } else {
+          card.progressText = '检查记录不存在';
+          card.statusText = '点击进入应用查看';
+        }
+      } finally {
+        rs.close();
       }
-      rs.close();
     } catch (err) {
       card.progressText = '检查进度读取失败';
     }
@@ -202,17 +205,58 @@ export class WidgetService {
     });
   }
 
+  /** 目标检查是否仍为草稿（重解析判断用；查询失败按非草稿处理）。 */
+  private static async isDraft(ctx: common.Context, inspectionId: number): Promise<boolean> {
+    try {
+      const db = await DbManager.getStore(ctx);
+      const rs = await db.querySql('SELECT status FROM inspection WHERE id = ?', [inspectionId]);
+      let status: string = '';
+      if (rs.goToNextRow()) {
+        status = DbManager.rsString(rs, 'status');
+      }
+      rs.close();
+      return status === InspectionStatus.DRAFT;
+    } catch (err) {
+      return false;
+    }
+  }
+
   /**
-   * 主应用进度变化后的主动刷新入口：
-   * inspectionId>0 只刷新绑定该记录的卡片；0 刷新全部绑定卡片。失败静默、永不抛错。
+   * 主应用进度变化后的主动刷新入口：失败静默、永不抛错。
+   * 绑定目标重解析（L12"进行中或最近冻结"语义）：绑定目标已冻结且存在更新目标时，
+   * 卡片跟随最新目标，避免冻结后新建草稿卡片仍停留在旧记录。
    */
   static refreshProgress(ctx: common.Context, inspectionId: number = 0): void {
+    WidgetService.doRefresh(ctx, inspectionId).catch(() => {
+    });
+  }
+
+  private static async doRefresh(ctx: common.Context, inspectionId: number): Promise<void> {
     const bindings = WidgetService.loadBindings(ctx);
-    for (const b of bindings) {
-      if (inspectionId > 0 && b.inspectionId !== inspectionId) {
-        continue;
+    if (bindings.length === 0) {
+      return;
+    }
+    try {
+      const latest = await WidgetService.resolveTargetInspection(ctx);
+      if (latest > 0) {
+        let rebound = false;
+        for (const b of bindings) {
+          // 仅当绑定目标已非进行中（冻结）且最新目标不同才跟随，不打扰多草稿并行场景
+          if (b.inspectionId !== latest && !(await WidgetService.isDraft(ctx, b.inspectionId))) {
+            b.inspectionId = latest;
+            rebound = true;
+          }
+        }
+        if (rebound) {
+          WidgetService.saveBindings(ctx, bindings);
+        }
       }
-      WidgetService.updateCard(ctx, b.formId, b.inspectionId).catch(() => {
+    } catch (err) {
+      // 重解析失败不影响本次刷新
+    }
+    // 进度变化刷新全部绑定卡片（卡片数量少，全量刷新成本可忽略且无状态漂移）
+    for (const b of bindings) {
+      await WidgetService.updateCard(ctx, b.formId, b.inspectionId).catch(() => {
       });
     }
   }

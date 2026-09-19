@@ -1,4 +1,4 @@
-﻿export interface RefineChange {
+export interface RefineChange {
   ruleName: string;
   before: string;
   after: string;
@@ -40,7 +40,7 @@ export class TextRefiner {
   /** 句式建议（§5.7）："，入住时已经存在" → "（入住时已存在）"括注。 */
   private static readonly EXISTED: RegExp = /(，)?(入住时|收房时|交房时|退租时)已[经]?(存在|有了?)/g;
   private static readonly CN_QTY: RegExp =
-    /([一两二三四五六七八九]十[一两二三四五六七八九]?|[一两二三四五六七八九十])(厘米|公分|毫米|米)/g;
+    /([一两二三四五六七八九]十[一两二三四五六七八九]?|[一两二三四五六七八九十])(厘米|公分|毫米|米)(左右|上下)?/g;
   private static readonly APPROX: RegExp = /(\d+)\s*(厘米|公分|毫米|米)\s*(左右|上下)/g;
 
   private static cnDigit(ch: string): number {
@@ -133,8 +133,15 @@ export class TextRefiner {
       out = TextRefiner.applyRule(out, reg, '主观词改客观描述', () => rule[1], changes);
     }
 
-    out = TextRefiner.applyRule(out, TextRefiner.ATTRIBUTION, '对话归因标记为转述',
-      () => '据对方表述，', changes);
+    out = TextRefiner.applyRule(out, TextRefiner.ATTRIBUTION, '对话归因标记为转述', (m) => {
+      // 说/讲/认为/觉得 → 转述引导语；要求/让 → 保留祈使语义但去除具体归因对象
+      // （"房东要求维修"→"对方要求维修"，避免转述强度失真）
+      const verb = m[2];
+      if (verb === '要求' || verb === '让') {
+        return '对方要求';
+      }
+      return '据对方表述，';
+    }, changes);
 
     out = TextRefiner.applyRule(out, TextRefiner.SELF_BLAME, '去除责任归因',
       () => '成因未确认', changes);
@@ -153,7 +160,8 @@ export class TextRefiner {
       if (converted === m[1]) {
         return null;
       }
-      return `${converted}${m[2]}`;
+      // 口语回忆值统一按近似值处理（§5.7 规范表达"约 10 厘米"）；"左右"后缀一并消费避免二次量化
+      return `约${converted}${m[2]}`;
     }, changes);
 
     out = TextRefiner.applyRule(out, TextRefiner.APPROX, '模糊量化改精确表述',

@@ -51,6 +51,8 @@ export class CompareRepo {
       'note': note.length > 0 ? note : null,
       'updated_at': Date.now()
     };
+    // 事务包裹"先查后写"：并发重入不会撞 UNIQUE(item_id) 约束
+    db.beginTransaction();
     try {
       const rs = await db.querySql('SELECT id FROM compare_result WHERE item_id = ?', [itemId]);
       const has = rs.goToNextRow();
@@ -63,7 +65,9 @@ export class CompareRepo {
         pre.equalTo('id', existId);
         await db.update(bucket, pre);
       }
+      db.commit();
     } catch (err) {
+      db.rollBack();
       const e = err as BusinessError;
       throw new Error(`对比结果写入失败 code=${e.code}`);
     }

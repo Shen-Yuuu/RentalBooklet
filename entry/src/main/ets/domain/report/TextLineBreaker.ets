@@ -47,8 +47,7 @@ export class TextLineBreaker {
             line = '';
             lineW = 0;
           }
-          for (let i = 0; i < token.length; i++) {
-            const ch = token.charAt(i);
+          for (const ch of TextLineBreaker.splitCodePoints(token)) {
             const chW = measure(ch, fontSize);
             if (line.length > 0 && lineW + chW > maxWidthPx) {
               result.push(line);
@@ -94,8 +93,28 @@ export class TextLineBreaker {
   }
 
   private static pushChars(tokens: string[], chunk: string): void {
-    for (let i = 0; i < chunk.length; i++) {
-      tokens.push(chunk.charAt(i));
+    for (const ch of TextLineBreaker.splitCodePoints(chunk)) {
+      tokens.push(ch);
     }
+  }
+
+  /** 按 Unicode 码点切分：代理对（emoji 等增补平面字符）作为一个单元，不产生孤立代理项。 */
+  private static splitCodePoints(s: string): string[] {
+    const out: string[] = [];
+    let i = 0;
+    while (i < s.length) {
+      const code = s.charCodeAt(i);
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < s.length) {
+        const low = s.charCodeAt(i + 1);
+        if (low >= 0xDC00 && low <= 0xDFFF) {
+          out.push(s.substring(i, i + 2));
+          i += 2;
+          continue;
+        }
+      }
+      out.push(s.charAt(i));
+      i += 1;
+    }
+    return out;
   }
 }

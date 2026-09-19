@@ -30,7 +30,8 @@ export class HouseRepo {
     return h;
   }
 
-  private static toBucket(h: House, now: number): relationalStore.ValuesBucket {
+  /** isCreate 时补写 created_at（DDL 为 NOT NULL 且无默认值，缺失会导致建档必失败）。 */
+  private static toBucket(h: House, now: number, isCreate: boolean): relationalStore.ValuesBucket {
     const bucket: relationalStore.ValuesBucket = {
       'name': h.name,
       'full_address': h.fullAddress,
@@ -43,12 +44,15 @@ export class HouseRepo {
       'record_location': h.recordLocation ? 1 : 0,
       'updated_at': now
     };
+    if (isCreate) {
+      bucket['created_at'] = now;
+    }
     return bucket;
   }
 
   async create(h: House): Promise<number> {
     const db = await DbManager.getStore(this.ctx);
-    const bucket = HouseRepo.toBucket(h, Date.now());
+    const bucket = HouseRepo.toBucket(h, Date.now(), true);
     try {
       return await db.insert(TABLE, bucket);
     } catch (err) {
@@ -59,7 +63,7 @@ export class HouseRepo {
 
   async update(h: House): Promise<void> {
     const db = await DbManager.getStore(this.ctx);
-    const bucket = HouseRepo.toBucket(h, Date.now());
+    const bucket = HouseRepo.toBucket(h, Date.now(), false);
     const pre = new relationalStore.RdbPredicates(TABLE);
     pre.equalTo('id', h.id);
     try {

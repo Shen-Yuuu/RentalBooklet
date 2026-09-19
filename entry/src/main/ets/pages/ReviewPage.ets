@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { Routes } from '../common/Routes';
-import { ConfirmSignParam, InspectionParam, MeterOcrParam, ReviewParam } from '../common/NavParams';
+import { ConfirmSignParam, MeterOcrParam, ReviewParam } from '../common/NavParams';
 import { CompletenessEngine, CompletenessIssue, CompletenessResult } from '../domain/completeness/CompletenessEngine';
 import { HandoverEntity } from '../domain/model/Entities';
 import { InspectionStatus, MeterType } from '../domain/model/CoreEnums';
@@ -91,6 +91,8 @@ struct ReviewPage {
   @State handoverBusy: boolean = false;
   private pathStack: NavPathStack = new NavPathStack();
   private waiverItemId: number = 0;
+  /** 首次 onShown 不重复刷新（onReady 已加载），仅此后每次回到本页时重算完整度。 */
+  private everShown: boolean = false;
   private waiverDialogController: CustomDialogController = new CustomDialogController({
     builder: WaiverDialog({
       onConfirm: (reason: string) => {
@@ -307,6 +309,13 @@ struct ReviewPage {
       .backgroundColor($r('app.color.bg_page'))
     }
     .title('记录完整度')
+    .onShown(() => {
+      // 从表读数页确认返回后重算完整度，否则完成率与遗漏清单停留在旧数据
+      if (this.everShown && this.inspectionId > 0) {
+        this.refresh();
+      }
+      this.everShown = true;
+    })
     .onReady((ctx: NavDestinationContext) => {
       this.pathStack = ctx.pathStack;
       const p = ctx.pathInfo.param as ReviewParam | null;
@@ -500,7 +509,7 @@ struct ReviewPage {
     }
   }
 
-  /** 遗漏条目点击：R2 直达表读数确认页，R3 交接区在本页顶部，其余回检查执行页定位房间。 */
+  /** 遗漏条目点击：R2 直达表读数确认页，R3 交接区在本页顶部，其余回检查执行页定位。 */
   private jumpToRoom(issue: CompletenessIssue): void {
     if (issue.ruleId === 'R2' && this.isValidMeterType(issue.meterType)) {
       this.pathStack.pushPathByName(Routes.METER_OCR,
@@ -513,8 +522,14 @@ struct ReviewPage {
     if (issue.roomId <= 0) {
       return;
     }
-    this.pathStack.replacePathByName(Routes.INSPECTION,
-      { inspectionId: this.inspectionId, focusRoomId: issue.roomId } as InspectionParam);
+    // 经 AppStorage 投递定位信号并 pop 回已有检查执行页实例：
+    // replace 会把栈顶 review 换成新执行页而栈中仍留旧实例，返回键回到陈旧状态
+    if (issue.itemId > 0) {
+      AppStorage.setOrCreate('inspection_focus_item', issue.itemId);
+    } else {
+      AppStorage.setOrCreate('inspection_focus_room', issue.roomId);
+    }
+    this.pathStack.pop();
   }
 
   private isValidMeterType(t: string): boolean {

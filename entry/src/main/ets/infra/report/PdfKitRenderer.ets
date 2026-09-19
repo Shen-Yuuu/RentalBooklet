@@ -7,7 +7,6 @@
  */
 
 import { pdfService } from '@kit.PDFKit';
-import { Font } from '@kit.ArkUI';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { PdfDocModel } from '../../domain/report/ReportComposer';
@@ -20,9 +19,11 @@ export class PdfKitRenderer {
 
   /**
    * 渲染文档模型到 outPath（沙箱绝对路径）。
+   * fontPath 由调用方经 UIContext.getFont().getFontByName() 解析后传入
+   * （Font 不可直接构造，需 UIContext 获取）；解析失败传空串走默认字体。
    * 失败上抛带原因的 Error，不静默；成功后调用方负责计算 pdf sha256。
    */
-  static async render(model: PdfDocModel, outPath: string): Promise<void> {
+  static async render(model: PdfDocModel, outPath: string, fontPath: string = ''): Promise<void> {
     if (model.pages.length === 0) {
       throw new Error('PDF 文档模型为空，无法生成');
     }
@@ -39,7 +40,6 @@ export class PdfKitRenderer {
       if (!doc.createDocument(PdfKitRenderer.PAGE_W, PdfKitRenderer.PAGE_H)) {
         throw new Error(PdfKitRenderer.NOT_SUPPORTED_MSG);
       }
-      const fontPath = PdfKitRenderer.resolveFontPath();
       for (let i = 0; i < model.pages.length; i++) {
         const pm = model.pages[i];
         const page = doc.insertBlankPage(i, PdfKitRenderer.PAGE_W, PdfKitRenderer.PAGE_H);
@@ -80,18 +80,5 @@ export class PdfKitRenderer {
         }
       }
     }
-  }
-
-  /** 系统字体路径（HarmonyOS Sans）；获取失败允许缺省（TextStyle 默认 HarmonyOS_Sans）。 */
-  private static resolveFontPath(): string {
-    try {
-      const info = new Font().getFontByName('HarmonyOS Sans');
-      if (info !== null && info !== undefined && info.path.length > 0) {
-        return info.path;
-      }
-    } catch (err) {
-      // 缺省字体兜底
-    }
-    return '';
   }
 }

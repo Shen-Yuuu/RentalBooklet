@@ -26,6 +26,10 @@ struct Index {
       } else {
         this.consumeDeepLink();
       }
+    }).catch(() => {
+      // 偏好读取失败按"未同意"处理（fail-safe）：免责声明必须确认后才可使用
+      this.disclaimerAccepted = false;
+      this.showDisclaimer = true;
     });
   }
 

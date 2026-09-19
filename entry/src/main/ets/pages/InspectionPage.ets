@@ -88,8 +88,9 @@ struct InspectionPage {
     }
     .title('检查执行')
     .onShown(() => {
-      // 从表读数/完整度页返回时刷新交接数据徽标
+      // 从表读数/完整度页返回时刷新徽标与数据，并消费"一键跳转"定位信号
       this.reloadHandoverEntries();
+      this.consumeFocusSignal();
     })
     .onReady((ctx: NavDestinationContext) => {
       this.pathStack = ctx.pathStack;
@@ -135,7 +136,7 @@ struct InspectionPage {
             .padding({ left: 12, right: 12, top: 6, bottom: 6 })
             .borderRadius(16)
             .backgroundColor(this.currentRoom === idx ? $r('app.color.brand') : $r('app.color.card_bg'))
-            .fontColor(this.currentRoom === idx ? Color.White : Color.Black)
+            .fontColor(this.currentRoom === idx ? Color.White : $r('app.color.text_pri'))
             .onClick(() => {
               this.currentRoom = idx;
             })
@@ -305,24 +306,29 @@ struct InspectionPage {
 
   @Builder
   sheetBuilder() {
-    ItemEditSheet({
-      itemName: this.editingItem.name,
-      itemStatus: this.editingItem.status,
-      initNote: this.editingNote,
-      inspectionId: this.inspectionId,
-      itemId: this.editingItem.id,
-      recordLocation: this.recordLocation,
-      frozen: this.frozen,
-      onStatus: (s: ItemStatus) => {
-        this.setItemStatus(this.editingItem, s);
-      },
-      onSaveNote: (raw: string, final: string) => {
-        this.saveNote(this.editingItem, raw, final);
-      },
-      onPhotosChanged: () => {
-        this.reloadPhotoCounts();
-      }
-    })
+    // 以 showSheet 条件挂载：每次打开都是全新实例（修复复用残留——上一项备注写入下一项），
+    // 关闭（含下滑）即卸载触发 aboutToDisappear 停止录音
+    if (this.showSheet && this.editingItem.id > 0) {
+      ItemEditSheet({
+        itemName: this.editingItem.name,
+        itemStatus: this.editingItem.status,
+        initNote: this.editingNote,
+        inspectionId: this.inspectionId,
+        itemId: this.editingItem.id,
+        roomId: this.editingItem.roomId,
+        recordLocation: this.recordLocation,
+        frozen: this.frozen,
+        onStatus: (s: ItemStatus) => {
+          this.setItemStatus(this.editingItem, s);
+        },
+        onSaveNote: (raw: string, final: string) => {
+          this.saveNote(this.editingItem, raw, final);
+        },
+        onPhotosChanged: () => {
+          this.reloadPhotoCounts();
+        }
+      })
+    }
   }
 
   @Builder
@@ -639,5 +645,41 @@ struct InspectionPage {
       }
     }
     this.focusRoomId = 0;
+  }
+
+  /**
+   * 完整度页"一键跳转"回传：ReviewPage pop 回本页前经 AppStorage 投递目标信号
+   * （inspection_focus_item 指定项 → 定位所在房间；inspection_focus_room 房间级遗漏），
+   * 定位后重载数据。替代旧的 replace 方案，避免栈内残留旧执行页实例。
+   */
+  private consumeFocusSignal(): void {
+    const focusItem = AppStorage.get<number>('inspection_focus_item');
+    const focusRoom = AppStorage.get<number>('inspection_focus_room');
+    const hasItem = focusItem !== undefined && focusItem > 0;
+    const hasRoom = focusRoom !== undefined && focusRoom > 0;
+    if (!hasItem && !hasRoom) {
+      return;
+    }
+    AppStorage.setOrCreate('inspection_focus_item', 0);
+    AppStorage.setOrCreate('inspection_focus_room', 0);
+    if (hasItem) {
+      let roomId: number = 0;
+      this.itemsByRoom.forEach((list: ItemEntity[], rid: number) => {
+        if (roomId === 0) {
+          for (const it of list) {
+            if (it.id === focusItem) {
+              roomId = rid;
+              break;
+            }
+          }
+        }
+      });
+      if (roomId > 0) {
+        this.focusRoomId = roomId;
+      }
+    } else if (focusRoom !== undefined && focusRoom > 0) {
+      this.focusRoomId = focusRoom;
+    }
+    this.load();
   }
 }

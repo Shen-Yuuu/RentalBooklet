@@ -16,7 +16,7 @@ export struct RecordsTab {
   @StorageProp('home_dirty') @Watch('reload') homeDirty: number = 0;
   @State drafts: RecordSummary[] = [];
   @State frozenList: RecordSummary[] = [];
-  /** 搜索关键字（房屋名/场景/报告号模糊匹配）。 */
+  /** 搜索关键字（房屋名/场景/报告号/检查项与备注全文模糊匹配，产品文档 §5.4）。 */
   @State keyword: string = '';
   /** 分段筛选选中项：0=全部 1=进行中 2=已冻结。 */
   @State filterIndexes: number[] = [0];
@@ -73,8 +73,9 @@ export struct RecordsTab {
       return true;
     }
     const k = this.keyword.trim();
+    const kl = k.toLowerCase();
     return s.houseName.includes(k) || this.sceneTitle(s.sceneKey).includes(k)
-      || s.reportNo.includes(k) || s.reportNo.toLowerCase().includes(k.toLowerCase());
+      || s.reportNo.toLowerCase().includes(kl) || s.itemText.includes(k);
   }
 
   private filteredDrafts(): RecordSummary[] {

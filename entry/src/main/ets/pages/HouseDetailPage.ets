@@ -136,6 +136,12 @@ struct HouseDetailPage {
       .backgroundColor($r('app.color.bg_page'))
     }
     .title('房屋详情')
+    .onShown(() => {
+      // 从检查执行/档案编辑页返回时刷新时间线与记录状态（onReady 仅首次加载）
+      if (this.houseId > 0) {
+        this.load();
+      }
+    })
     .onReady((ctx: NavDestinationContext) => {
       this.pathStack = ctx.pathStack;
       const p = ctx.pathInfo.param as HouseDetailParam | null;

@@ -17,6 +17,8 @@ export class SpeechService {
   private capturer: audio.AudioCapturer | null = null;
   private sessionId: string = '';
   private listening: boolean = false;
+  /** stop() 已发出 finish、正在等 onComplete 回调期间为 true（期间快速重启需强制释放旧资源）。 */
+  private stopping: boolean = false;
   private lastText: string = '';
   private cb: SpeechCallbacks | null = null;
 
@@ -30,8 +32,15 @@ export class SpeechService {
 
   async start(cb: SpeechCallbacks): Promise<void> {
     if (this.listening) {
-      return;
+      if (!this.stopping) {
+        return;
+      }
+      // 上一会话在等 onComplete 期间被快速重启：强制释放旧资源后开新会话
+      this.listening = false;
+      await this.releaseCapturer();
+      this.releaseEngine();
     }
+    this.stopping = false;
     this.cb = cb;
     this.lastText = '';
     this.sessionId = `rb_${Date.now()}`;
@@ -60,10 +69,18 @@ export class SpeechService {
         }
       },
       onComplete: (sessionId: string, eventMessage: string) => {
+        // 会话结束（含 60s 到点/静音超时自动结束）：立即释放麦克风与引擎。
+        // 否则麦克风持续占用（隐私指示器常亮），下次 start 覆盖引用造成旧实例泄漏。
         this.listening = false;
+        this.stopping = false;
+        void this.releaseCapturer();
+        this.releaseEngine();
       },
       onError: (sessionId: string, errorCode: number, errorMessage: string) => {
         this.listening = false;
+        this.stopping = false;
+        void this.releaseCapturer();
+        this.releaseEngine();
         const callback = this.cb;
         if (callback !== null) {
           callback.onError(`识别出错 code=${errorCode} ${errorMessage}`);
@@ -120,16 +137,40 @@ export class SpeechService {
   }
 
   async stop(): Promise<void> {
-    if (this.engine !== null && this.listening) {
-      try {
-        this.engine.finish(this.sessionId);
-      } catch (err) {
-        // 引擎可能已结束
-      }
+    if (!this.listening) {
+      // 已自动结束的资源在 onComplete/onError 中释放；此处兜底确保无残留
+      await this.releaseCapturer();
+      this.releaseEngine();
+      return;
     }
-    await this.releaseCapturer();
-    this.listening = false;
-    this.releaseEngine();
+    this.stopping = true;
+    let finishOk = false;
+    try {
+      if (this.engine !== null) {
+        this.engine.finish(this.sessionId);
+        finishOk = true;
+      }
+    } catch (err) {
+      // 引擎可能已结束
+    }
+    if (!finishOk) {
+      this.listening = false;
+      this.stopping = false;
+      await this.releaseCapturer();
+      this.releaseEngine();
+      return;
+    }
+    // finish 是异步结算信号：等 onResult(isFinal)/onComplete 回调后再统一释放，
+    // 立即 shutdown 会把用户最后一段话的识别结果丢掉；2s 兜底防引擎未回调导致资源悬挂。
+    const sid = this.sessionId;
+    setTimeout(() => {
+      if (this.listening && this.stopping && this.sessionId === sid) {
+        this.listening = false;
+        this.stopping = false;
+        void this.releaseCapturer();
+        this.releaseEngine();
+      }
+    }, 2000);
   }
 
   /** 关闭识别引擎释放资源（每次会话重建，避免长期持有引擎实例）。 */

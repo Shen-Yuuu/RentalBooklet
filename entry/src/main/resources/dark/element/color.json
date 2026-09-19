@@ -79,6 +79,14 @@
     {
       "name": "card_bg",
       "value": "#1E2024"
+    },
+    {
+      "name": "overlay_scrim",
+      "value": "#CC000000"
+    },
+    {
+      "name": "overlay_soft",
+      "value": "#0F000000"
     }
   ]
 }

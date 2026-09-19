@@ -74,6 +74,8 @@ export class MeterRepo {
       'na_flag': naFlag ? 1 : 0,
       'note': note.length > 0 ? note : null
     };
+    // 事务包裹"先查后写"：并发重入不会对同一 inspection+type 插入两行
+    db.beginTransaction();
     try {
       const existing = await this.getByType(inspectionId, meterType);
       if (existing === null) {
@@ -83,7 +85,9 @@ export class MeterRepo {
         pre.equalTo('id', existing.id);
         await db.update(bucket, pre);
       }
+      db.commit();
     } catch (err) {
+      db.rollBack();
       const e = err as BusinessError;
       throw new Error(`表读数写入失败 code=${e.code}`);
     }

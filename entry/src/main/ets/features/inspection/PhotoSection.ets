@@ -11,10 +11,12 @@ import { PermissionManager } from '../../infra/permission/PermissionManager';
 import { FEATURE_PHOTO_LOCATION, PermissionGrant } from '../../domain/permission/PermissionSpec';
 import { StorageStat } from '../../common/StorageStat';
 
-/** 检查项照片区：拍全景/细节、相册导入（强制"导入"标记）、缩略图与质量角标。 */
+/** 检查项照片区：拍全景/细节、相册导入（强制"从相册导入"标记）、缩略图与质量角标。 */
 @Component
 export struct PhotoSection {
   @Prop @Watch('onItemChanged') itemId: number = 0;
+  /** 照片所属房间：完整度 R5/R6 与 PDF 逐房间页依赖 room_id，缺失会导致全景照成为"死遗漏"。 */
+  @Prop roomId: number = 0;
   @Prop inspectionId: number = 0;
   @Prop recordLocation: boolean = false;
   /** FROZEN 只读加固：冻结记录不渲染拍照/导入入口，隐藏删除。 */
@@ -84,8 +86,9 @@ export struct PhotoSection {
                   .borderRadius(8)
                   .objectFit(ImageFit.Cover)
                 Row({ space: 4 }) {
-                  Text(p.source === PhotoSource.IMPORTED ? '导入' : PhotoSection.kindLabel(p.kind))
+                  Text(p.source === PhotoSource.IMPORTED ? '从相册导入' : PhotoSection.kindLabel(p.kind))
                     .fontSize(10)
+                    .maxLines(1)
                     .fontColor(p.source === PhotoSource.IMPORTED ? $r('app.color.amber') : $r('app.color.text_sec'))
                   if (p.qualityFlags.indexOf('TOO_DARK') >= 0) {
                     Text('偏暗').fontSize(10).fontColor($r('app.color.danger'))
@@ -96,7 +99,7 @@ export struct PhotoSection {
                 Text('×')
                   .fontSize(13)
                   .fontColor(Color.White)
-                  .backgroundColor('#CC000000')
+                  .backgroundColor($r('app.color.overlay_scrim'))
                   .borderRadius(9)
                   .width(18)
                   .height(18)
@@ -147,6 +150,7 @@ export struct PhotoSection {
     const files = await ImagePipeline.transcode(uiCtx, uri, this.inspectionId, baseName);
     const photo = new PhotoEntity();
     photo.inspectionId = this.inspectionId;
+    photo.roomId = this.roomId;
     photo.itemId = this.itemId;
     photo.kind = kind;
     photo.source = source;

@@ -14,6 +14,8 @@ export struct ItemEditSheet {
   @Prop initNote: string = '';
   @Prop inspectionId: number = 0;
   @Prop itemId: number = 0;
+  /** 照片所属房间（写入 photo.room_id，R5/R6 与 PDF 逐房间页依赖）。 */
+  @Prop roomId: number = 0;
   @Prop recordLocation: boolean = false;
   /** FROZEN 只读加固：冻结记录禁用一切编辑入口（状态/备注/语音/照片）。 */
   @Prop frozen: boolean = false;
@@ -24,6 +26,8 @@ export struct ItemEditSheet {
   @State speechError: string = '';
   @State voiceUsed: boolean = false;
   private speech: SpeechService = new SpeechService();
+  /** 60s 语音上限定时器 id（半模态关闭/手动停止时取消）。 */
+  private recordTimer: number = -1;
   onStatus: (s: ItemStatus) => void = (s: ItemStatus) => {};
   onSaveNote: (raw: string, final: string) => void = (raw: string, final: string) => {};
   onPhotosChanged: () => void = () => {};
@@ -34,6 +38,22 @@ export struct ItemEditSheet {
     this.voiceUsed = false;
     this.suggestion = '';
     this.speechError = '';
+  }
+
+  aboutToDisappear(): void {
+    // 半模态关闭即停止录音：否则麦克风最长持续采集 60s，闭包持有已销毁组件引用
+    if (this.recording) {
+      this.speech.stop();
+      this.recording = false;
+    }
+    this.cancelRecordTimer();
+  }
+
+  private cancelRecordTimer(): void {
+    if (this.recordTimer >= 0) {
+      clearTimeout(this.recordTimer);
+      this.recordTimer = -1;
+    }
   }
 
   build() {
@@ -53,6 +73,7 @@ export struct ItemEditSheet {
 
       PhotoSection({
         itemId: this.itemId,
+        roomId: this.roomId,
         inspectionId: this.inspectionId,
         recordLocation: this.recordLocation,
         frozen: this.frozen,
@@ -185,6 +206,7 @@ export struct ItemEditSheet {
 
   private async toggleRecording(): Promise<void> {
     if (this.recording) {
+      this.cancelRecordTimer();
       await this.speech.stop();
       this.recording = false;
       this.computeSuggestion(this.rawText);
@@ -206,16 +228,19 @@ export struct ItemEditSheet {
           this.rawText = t;
           this.note = t;
           this.recording = false;
+          this.cancelRecordTimer();
           this.computeSuggestion(t);
         },
         onError: (m: string) => {
           this.speechError = m;
           this.recording = false;
+          this.cancelRecordTimer();
         }
       });
       this.recording = true;
       this.speechError = '';
-      setTimeout(() => {
+      this.recordTimer = setTimeout(() => {
+        this.recordTimer = -1;
         if (this.recording) {
           this.toggleRecording();
         }

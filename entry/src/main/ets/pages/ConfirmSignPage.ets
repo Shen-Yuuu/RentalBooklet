@@ -172,7 +172,7 @@ struct ConfirmSignPage {
               .width('100%')
               .backgroundColor($r('app.color.brand'))
               .onClick(() => {
-                this.doFreeze();
+                this.confirmFreeze();
               })
           }
         }
@@ -340,6 +340,31 @@ struct ConfirmSignPage {
       return '';
     }
     return JSON.stringify(parts);
+  }
+
+  /** 冻结是不可逆操作（之后只能创建修订版本）：先二次确认再执行（设计 §5.3 / L8）。 */
+  private confirmFreeze(): void {
+    if (this.freezing || this.frozen) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '冻结本次记录',
+      message: '冻结后记录进入只读状态，校验清单随之固化，修改只能创建修订版本。确定冻结吗？',
+      autoCancel: true,
+      alignment: DialogAlignment.Bottom,
+      primaryButton: {
+        value: '再看看',
+        action: () => {
+        }
+      },
+      secondaryButton: {
+        value: '确定冻结',
+        fontColor: $r('app.color.brand'),
+        action: () => {
+          this.doFreeze();
+        }
+      }
+    });
   }
 
   /** 冻结：完整度快照随事务写入；成功跳报告预览，失败 Toast 错误。 */

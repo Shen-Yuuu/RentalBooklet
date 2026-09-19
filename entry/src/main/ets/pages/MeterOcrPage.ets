@@ -40,6 +40,9 @@ struct MeterOcrPage {
   @State ocrHint: string = '';
   @State ocrRunning: boolean = false;
   @State busy: boolean = false;
+  /** 本次会话新建的表盘照片 id（未确认离开时清理，避免孤儿照片计入 manifest 却永不渲染）。 */
+  private createdPhotoId: number = 0;
+  private savedThisSession: boolean = false;
   private pathStack: NavPathStack = new NavPathStack();
   private ocrRawText: string = '';
 
@@ -98,6 +101,11 @@ struct MeterOcrPage {
             .width('100%')
           }
 
+          Text('取景引导：将表盘对正拍入，读数窗完整清晰、光线充足、避免反光')
+            .fontSize(11)
+            .opacity(0.6)
+            .width('100%')
+
           if (this.busy || this.ocrRunning) {
             Row({ space: 8 }) {
               LoadingProgress().width(18).height(18)
@@ -129,7 +137,7 @@ struct MeterOcrPage {
                   .padding({ left: 12, right: 12, top: 6, bottom: 6 })
                   .borderRadius(10)
                   .backgroundColor(this.valueText === c.value ? $r('app.color.brand') : $r('app.color.card_bg'))
-                  .fontColor(this.valueText === c.value ? Color.White : Color.Black)
+                  .fontColor(this.valueText === c.value ? Color.White : $r('app.color.text_pri'))
                   .margin(4)
                   .onClick(() => {
                     this.valueText = c.value;
@@ -201,6 +209,15 @@ struct MeterOcrPage {
       }
     }
     .title(`${this.meterTitle}读数确认`)
+    .onDisAppear(() => {
+      // 未确认即离开：清理本次新建的表盘照片与文件（保存过则跳过）
+      if (this.createdPhotoId > 0 && !this.savedThisSession && !this.frozen) {
+        const uiCtx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        new PhotoRepo(uiCtx).deletePhoto(this.createdPhotoId).catch(() => {
+          // 清理失败静默：残留照片不进入报告（无 confirmed 读数引用）
+        });
+      }
+    })
     .onReady((ctx: NavDestinationContext) => {
       this.pathStack = ctx.pathStack;
       const p = ctx.pathInfo.param as MeterOcrParam | null;
@@ -281,6 +298,14 @@ struct MeterOcrPage {
       }
       const baseName = `meter_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       const files = await ImagePipeline.transcode(uiCtx, uri, this.inspectionId, baseName);
+      // 重复拍覆盖：删除本次会话上一张未确认的表盘照片（"保留历史可删"以已确认记录为准）
+      if (this.createdPhotoId > 0) {
+        try {
+          await new PhotoRepo(uiCtx).deletePhoto(this.createdPhotoId);
+        } catch (ignored) {
+        }
+        this.createdPhotoId = 0;
+      }
       const photo = new PhotoEntity();
       photo.inspectionId = this.inspectionId;
       photo.kind = PhotoKind.METER;
@@ -292,6 +317,7 @@ struct MeterOcrPage {
       photo.shotAt = Date.now();
       photo.qualityFlags = QualityHeuristics.qualityFlagFor(files.avgLuma);
       const id = await new PhotoRepo(uiCtx).addPhoto(photo);
+      this.createdPhotoId = id;
       this.photoId = id;
       this.photoThumb = files.thumbPath;
       await this.runOcr(files.originPath);
@@ -351,6 +377,7 @@ struct MeterOcrPage {
         this.naFlag ? '' : v, this.ocrRawText, null, this.photoId, true, this.naFlag,
         this.noteText.trim());
       this.getUIContext().getPromptAction().showToast({ message: '已保存' });
+      this.savedThisSession = true;
       this.pathStack.pop();
     } catch (err) {
       this.getUIContext().getPromptAction().showToast({ message: '保存失败，请重试' });
